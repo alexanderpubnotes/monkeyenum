@@ -39,13 +39,19 @@ MSG_HELP="
 
  Options:
 
+ General
  -s, --server SERVER_IP		Specify server's IP address [REQUIRED]
  -u, --user USERNAME		Specify username
  -p, --password PASSWORD	Specify user's password
-
  -d, --domain			Specify server's domain
- -l, --ldap			LDAP enumeration
  -c, --comname			Common Name
+
+ LDAP
+ -l, --ldap			LDAP enumeration
+
+ RPC
+ -r, --rpc			RPC enumeration
+
 "
 if [ "$*" == "" ]
 then
@@ -60,7 +66,8 @@ PASS=''
 DOMAIN="WORKGROUP"
 ONLY_USERS=0
 COMMON_NAME="DOOFUS TEST"
-
+LDAP=0
+RPC=0
 
 # Options handling
 while test -n "$1"
@@ -96,6 +103,10 @@ do
 			COMNAME=$2
 			shift
 		;;
+		-r | --rpc)
+			RPC=1
+			shift
+		;;
 *)
 			echo "Invalid option: $1"
 			exit 1
@@ -120,9 +131,27 @@ then
 
 	RESULT="ldapsearch -x -H ldap://${SERVER_IP} -b \"\" -s base \"(objectclass=*)\" > base.txt"
 	RESULT2="ldapsearch -x -H ldap://${SERVER_IP} -D '${USER}@${DOMAIN}' -w '${PASS}' -b \"DC=${DOMAINL},DC=${DOMAINR}\" > verbose.txt"
-	RESULT3="ldapsearch -x -D '${USER}@${DOMAIN}' -w '${PASS}' -H ldap://${SERVER_IP} -b \"CN=${COMNAMEL},CN=${COMNAMER},DC=${DOMAINL},DC=${DOMAINR}\" > verbose2.txt" 
+	#RESULT3="ldapsearch -x -D '${USER}@${DOMAIN}' -w '${PASS}' -H ldap://${SERVER_IP} -b \"CN=${COMNAMEL},CN=${COMNAMER},DC=${DOMAINL},DC=${DOMAINR}\" > verbose2.txt"
+
+	bash -c "${RESULT}"
+        bash -c "${RESULT2}"
+        #bash -c "${RESULT3}"
 fi
 
+
+if [ ${RPC} -eq 1 ]
+then
+
+DOMAIN_SID=$(rpcclient -U "${USER}"%"${PASS}" ${SERVER_IP} -W ${DOMAIN} -c "lookupnames administrator" | grep -v "password:" | cut -d" " -f 2 | cut -d"-" -f 1-7)
+
+
+SIDS=""
+for num in $(seq 500 2000)
+do
+	SIDS="${SIDS} ${DOMAIN_SID}-${num}"
+done
+
+RESULT="rpcclient -U '${USER}'%'${PASS}' ${SERVER_IP} -W '${DOMAIN}' -c 'lookupsids ${SIDS}' | grep -v '*unknown*' | grep -v '00000'"
+
 bash -c "${RESULT}"
-bash -c "${RESULT2}"
-bash -c "${RESULT3}"
+fi
